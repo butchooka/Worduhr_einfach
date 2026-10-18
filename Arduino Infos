@@ -1,9 +1,6 @@
 Arduino Infos
 
 in meinem Beispiel habe ich einen Wemos D! Mini ESP32 verwendet.
-Für ARduino müssen noch folgende Plugins vorhanden sein:
-
-
 
 Wenn beim Start kein Wifi vorhanden ist wird ein Hotspot aufgebaut, hierauf Verbinden und das eigene WIFI konfigurieren.
 
@@ -12,6 +9,7 @@ Bibliotheken (stehen mit GitHub-Links im Kopf der Datei)
 Das ESP32-Boardpaket von Espressif, Version 3.x oder neuer. WLAN, Webserver, DNS, mDNS und Speicher sind darin schon enthalten.
 FastLED, Version 3.9 oder neuer.
 
+---------------------
 Was die Uhr kann
 
 Farben: 8 Standardfarben, “Zufall” (neue Farbe jede volle Stunde) und eine eigene Farbe über den Farbwähler. Inaktive Buchstaben bleiben immer aus.
@@ -28,9 +26,8 @@ Hotspot: Ist kein WLAN gespeichert oder nicht erreichbar, öffnet die Uhr nach 2
 Anzeige ohne Uhrzeit: Solange keine Uhrzeit da ist, pulsiert “ES IST”, orange im Hotspot-Modus, blau beim Verbinden.
 Hotspot-Verhalten: Der Hotspot schaltet sich ab, sobald das WLAN steht und niemand mehr darauf verbunden ist. Fällt das WLAN länger als 2 Minuten aus, geht er wieder an.
 
-Was du prüfen solltest
+Bitte abgleichen
+LED_PIN ist auf 32 gesetzt (Wemos Mini ESP32). Beim ESP32-C6 musst du ihn anpassen, und FastLED muss aktuell genug sein.
 
-NTP per DHCP: Der Aufruf dafür (esp_netif_sntp_init) ist die Stelle, an der es je nach Core-Version Compile-Probleme geben könnte. Meldet die IDE dort einen Fehler, schick mir die Meldung.
-ESP32-C6: LED_PIN ist auf 32 gesetzt (Wemos Mini ESP32). Beim C6 musst du ihn anpassen, und FastLED muss aktuell genug sein.
-Buchstabenraster: Ich habe dein Raster nur teilweise im Kopf: erste Zeile ESXISTXXXXXXXXXX und letzte Zeile X+X1234XMINUTEN. Die letzte Zeile habe ich mit einem X auf 16 Zeichen aufgefüllt und die Zeilen dazwischen selbst belegt. Das Raster steht im Kopf der Datei, die Wörter stehen in einer kleinen Tabelle (W_xxx = {Zeile, Spalte, Länge}). Weicht deine Frontplatte ab, musst du nur diese Tabelle ändern.
-Zeitansage: Ich habe sie so umgesetzt: “zwanzig nach”, “fünf vor halb”, “viertel vor” und “ein Uhr”.
+Zeitansage: 
+Ich habe sie so umgesetzt: “zwanzig nach”, “fünf vor halb”, “viertel vor” und “ein Uhr”.
