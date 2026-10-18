@@ -1,0 +1,19 @@
+Infos für die ESPHome Version.
+
+Das ESPHOme braucht in "Secrets" folgende ausgefüllte Parameter.
+
+wifi_ssid
+wifi_password
+ap_password
+api_key
+
+
+in der ESPHome sollten folgende Angaben für deinen Standrot geändert werden:
+latitude:
+longitude: 
+led_pin:
+
+esp32:
+  board: 
+
+timezone sollte mit Europe/Berlin eigentlich passen, aber wer weiß
