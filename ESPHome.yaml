@@ -1,0 +1,441 @@
+# Wortuhr 16x16 - WS2812-Matrix, alte Uhr: je 2 LED-Zeilen leuchten zusammen hinter einem Buchstaben
+# (Ausrichtung über mirror_x / serpentine einstellbar)
+# Raster (8 Buchstabenzeilen, jede 2 LED-Zeilen hoch):
+#   ESXISTXXXXXXXXXX
+#   ZWANZIGHALBXZEHN
+#   FÜNFVIERTELXNACH
+#   VORXHALBXZEHNELF
+#   ZWEIDREINEUNVIER
+#   ACHTEINSECHSFÜNF
+#   SIEBENZWÖLFXXUHR
+#   X+X1234XMINUTEN    (nur bei 1-4 Minuten nach dem 5-Minuten-Schritt, Spalten siehe plus_col/digit_col/minuten_col)
+substitutions:
+  name: wortuhr
+  friendly_name: Wortuhr
+  led_pin: GPIO32              # Datenpin der Matrix (am besten über Pegelwandler 74AHCT125 auf 5 V)
+  serpentine: "true"          # "true" = Matrix ist als durchgehende Schlange (Zickzack) verdrahtet
+  mirror_x: "true"            # "true" = links/rechts spiegeln (LED 0 sitzt von vorn gesehen oben rechts)
+  plus_col: "1"               # Spalte des "+" in der letzten Buchstabenzeile
+  digit_col: "3"              # Spalte der "1" (2, 3, 4 folgen rechts daneben)
+  minuten_col: "8"            # Startspalte von "MINUTEN" (7 Buchstaben)
+  latitude: "47.999°"         # Standort für Sonnenauf-/untergang (aktuell Freiburg) - bitte anpassen
+  longitude: "7.842°"
+  ma_per_channel: "18"        # mA je Farbkanal bei Vollausschlag (WS2812: 15-20)
+  idle_ma_per_led: "1"        # Ruhestrom je LED (256 LEDs = ca. 256 mA, zählt zur Strombegrenzung)
+  fx_duration: 20s            # Dauer jedes Effekts
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  on_boot:
+    priority: -100
+    then:
+      - light.turn_on:
+          id: matrix
+          brightness: 100%
+          effect: "Wortuhr"
+
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    encryption:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:                          # Fallback-Hotspot, falls das WLAN nicht erreichbar ist
+    ssid: "${friendly_name} Fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Berlin
+
+sun:
+  id: sun_calc
+  latitude: ${latitude}
+  longitude: ${longitude}
+  time_id: sntp_time
+
+globals:
+  - id: fx_mode            # 0 = Uhr, 1 Rainbow, 2 Aurora, 3 Blau, 4 Grün, 5 Rot, 6 Weiß, 7 Matrix
+    type: int
+    initial_value: "0"
+  - id: fx_start
+    type: uint32_t
+    initial_value: "0"
+  - id: night_now
+    type: bool
+    initial_value: "false"
+  - id: rnd_idx            # aktuelle Zufallsfarbe (Index in der Palette)
+    type: int
+    initial_value: "0"
+  - id: rnd_key            # Tag*24+Stunde der letzten Farbwahl (-1 = noch keine)
+    type: int
+    initial_value: "-1"
+
+# ---------------- Konfiguration (Home Assistant: Gerät > Konfiguration) ----------------
+number:
+  - platform: template
+    id: br_day
+    name: "Helligkeit Tag"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 60
+    min_value: 1
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+  - platform: template
+    id: br_night
+    name: "Helligkeit Nacht"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 8
+    min_value: 1
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+  - platform: template
+    id: cur_limit
+    name: "Strombegrenzung"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 500
+    min_value: 100
+    max_value: 3000
+    step: 10
+    unit_of_measurement: "mA"
+    mode: box
+  - platform: template
+    id: night_start_off
+    name: "Nacht Beginn Versatz"      # Minuten nach (+) / vor (-) Sonnenuntergang
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    min_value: -240
+    max_value: 240
+    step: 5
+    unit_of_measurement: "min"
+    mode: box
+  - platform: template
+    id: night_end_off
+    name: "Morgen Tag Versatz"        # Minuten nach (+) / vor (-) Sonnenaufgang (Ende der Nacht)
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    min_value: -240
+    max_value: 240
+    step: 5
+    unit_of_measurement: "min"
+    mode: box
+
+switch:
+  - platform: template
+    id: show_minutes
+    name: "Einzelminuten anzeigen"     # "+ 1..4 MINUTEN" in der letzten Zeile
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+select:
+  - platform: template
+    id: col_active
+    name: "Farbe Buchstaben"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "Warmweiß"
+    options: ["Warmweiß", "Weiß", "Rot", "Orange", "Gelb", "Grün", "Blau", "Violett", "Zufall"]
+
+# ---------------- Steuerung: Effekte ----------------
+script:
+  - id: run_fx
+    mode: restart
+    parameters:
+      mode: int
+    then:
+      - lambda: |-
+          id(fx_mode) = mode;
+          id(fx_start) = millis();
+      - delay: ${fx_duration}
+      - lambda: 'id(fx_mode) = 0;'
+
+button:
+  - platform: template
+    name: "Effekt Rainbow"
+    on_press:
+      - script.execute: {id: run_fx, mode: 1}
+  - platform: template
+    name: "Effekt Aurora"
+    on_press:
+      - script.execute: {id: run_fx, mode: 2}
+  - platform: template
+    name: "Effekt Matrix"
+    on_press:
+      - script.execute: {id: run_fx, mode: 7}
+  - platform: template
+    name: "Blinken Blau"
+    on_press:
+      - script.execute: {id: run_fx, mode: 3}
+  - platform: template
+    name: "Blinken Grün"
+    on_press:
+      - script.execute: {id: run_fx, mode: 4}
+  - platform: template
+    name: "Blinken Rot"
+    on_press:
+      - script.execute: {id: run_fx, mode: 5}
+  - platform: template
+    name: "Blinken Weiß"
+    on_press:
+      - script.execute: {id: run_fx, mode: 6}
+
+# ---------------- Nacht automatisch (Sonnenuntergang + Versatz bis Sonnenaufgang + Versatz) ----------------
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          auto now = id(sntp_time).now();
+          if (!now.is_valid()) {
+            id(night_now) = false;
+            return;
+          }
+          auto sr = id(sun_calc).sunrise(-0.833);
+          auto ss = id(sun_calc).sunset(-0.833);
+          if (!sr.has_value() || !ss.has_value()) {   // z. B. Polartag: feste Zeiten als Ersatz
+            id(night_now) = (now.hour >= 22 || now.hour < 6);
+            return;
+          }
+          // Vergleich nur über die Tageszeit (Minuten seit Mitternacht, Ortszeit): unabhängig davon,
+          // ob sunrise()/sunset() das Ereignis von heute oder das nächste (morgen) liefern
+          auto lsr = ESPTime::from_epoch_local(sr->timestamp);
+          auto lss = ESPTime::from_epoch_local(ss->timestamp);
+          auto norm = [](int m) { return ((m % 1440) + 1440) % 1440; };
+          const int now_min = now.hour * 60 + now.minute;
+          const int start_min = norm(lss.hour * 60 + lss.minute + (int) id(night_start_off).state);
+          const int end_min = norm(lsr.hour * 60 + lsr.minute + (int) id(night_end_off).state);
+          if (start_min <= end_min)
+            id(night_now) = (now_min >= start_min) && (now_min < end_min);
+          else
+            id(night_now) = (now_min >= start_min) || (now_min < end_min);
+
+# ---------------- Diagnose: welcher Helligkeitsregler gerade gilt ----------------
+text_sensor:
+  - platform: template
+    name: "Modus"
+    entity_category: diagnostic
+    update_interval: 10s
+    lambda: |-
+      return std::string(id(night_now) ? "Nacht" : "Tag");
+  - platform: sun
+    name: "Sonnenaufgang"
+    entity_category: diagnostic
+    sun_id: sun_calc
+    type: sunrise
+    elevation: -0.833
+    format: "%H:%M"
+  - platform: sun
+    name: "Sonnenuntergang"
+    entity_category: diagnostic
+    sun_id: sun_calc
+    type: sunset
+    elevation: -0.833
+    format: "%H:%M"
+
+# ---------------- LED-Matrix (intern, nicht in Home Assistant sichtbar) ----------------
+light:
+  - platform: esp32_rmt_led_strip
+    id: matrix
+    internal: true
+    pin: ${led_pin}
+    num_leds: 256
+    chipset: WS2812
+    rgb_order: GRB
+    gamma_correct: 1.0
+    default_transition_length: 0s
+    restore_mode: ALWAYS_ON
+    effects:
+      - addressable_lambda:
+          name: "Wortuhr"
+          update_interval: 50ms
+          lambda: |-
+            const int ROWS = 16, COLS = 16, N = 256;
+            // r = Buchstabenzeile 0..7 (belegt LED-Zeilen 2r und 2r+1), c = Startspalte, n = Länge
+            struct W { uint8_t r, c, n; };
+            static const W ES = {0, 0, 2}, IST = {0, 3, 3};
+            static const W M_ZWANZIG = {1, 0, 7}, M_ZEHN = {1, 12, 4};
+            static const W M_FUENF = {2, 0, 4}, M_VIERTEL = {2, 4, 7}, NACH = {2, 12, 4};
+            static const W VOR = {3, 0, 3}, HALB = {3, 4, 4};
+            static const W UHR = {6, 13, 3}, H_EIN = {5, 4, 3};
+            static const W PLUS = {7, ${plus_col}, 1}, MINUTEN = {7, ${minuten_col}, 7};
+            // Stunde 0..11 (0 = zwölf)
+            static const W HOURS[12] = {{6, 6, 5}, {5, 4, 4}, {4, 0, 4}, {4, 4, 4}, {4, 12, 4}, {5, 12, 4},
+                                        {5, 7, 5}, {6, 0, 6}, {5, 0, 4}, {4, 8, 4}, {3, 9, 4}, {3, 13, 3}};
+            // Warmweiß, Weiß, Rot, Orange, Gelb, Grün, Blau, Violett
+            static const uint8_t PAL[8][3] = {{255, 140, 40}, {255, 255, 255}, {255, 0, 0}, {255, 70, 0},
+                                              {255, 190, 0}, {0, 255, 0}, {0, 0, 255}, {150, 0, 255}};
+            // Blinkfarben: Blau, Grün, Rot, Weiß
+            static const uint8_t BLK[4][3] = {{0, 0, 255}, {0, 255, 0}, {255, 0, 0}, {255, 255, 255}};
+
+            auto t = id(sntp_time).now();
+            const bool valid = t.is_valid();
+            const bool serp = ${serpentine};
+            const bool mirror = ${mirror_x};
+            const float bf = (id(night_now) ? id(br_night).state : id(br_day).state) / 100.0f;
+            const float limit_ma = id(cur_limit).state;
+            const int mode = id(fx_mode);
+            const float tm = millis() / 1000.0f;
+            const float ts = (millis() - id(fx_start)) / 1000.0f;
+
+            Color frame[N];
+            if (mode == 1) {  // Rainbow
+              for (int r = 0; r < ROWS; r++)
+                for (int c = 0; c < COLS; c++) {
+                  float hue = fmodf(millis() / 6.0f + (r + c) * 14.0f, 360.0f);
+                  float rr, gg, bb;
+                  hsv_to_rgb((int) hue, 1.0f, 1.0f, rr, gg, bb);
+                  frame[r * COLS + c] = Color((uint8_t) (rr * 255.0f), (uint8_t) (gg * 255.0f), (uint8_t) (bb * 255.0f));
+                }
+            } else if (mode == 2) {  // Aurora: grün - türkis - blau - violett, wabernde Schleier
+              for (int r = 0; r < ROWS; r++)
+                for (int c = 0; c < COLS; c++) {
+                  float w1 = sinf(c * 0.45f + tm * 0.6f + sinf(r * 0.35f - tm * 0.35f) * 1.6f);
+                  float w2 = sinf(r * 0.5f - tm * 0.45f + sinf(c * 0.3f + tm * 0.25f) * 1.8f);
+                  float hue = 130.0f + 130.0f * (0.5f + 0.25f * w1 + 0.25f * w2);
+                  float val = 0.25f + 0.75f * (0.5f + 0.5f * sinf(c * 0.6f + tm * 0.9f + w2 * 1.5f));
+                  float rr, gg, bb;
+                  hsv_to_rgb((int) hue, 1.0f, val, rr, gg, bb);
+                  frame[r * COLS + c] = Color((uint8_t) (rr * 255.0f), (uint8_t) (gg * 255.0f), (uint8_t) (bb * 255.0f));
+                }
+            } else if (mode >= 3 && mode <= 6) {  // langsames Blinken (Atmen, 4 s je Zyklus)
+              float v = 0.5f - 0.5f * cosf(6.2831853f * ts / 4.0f);
+              v = 0.04f + 0.96f * v;
+              const uint8_t *p = BLK[mode - 3];
+              for (int i = 0; i < N; i++) frame[i] = Color((uint8_t) (p[0] * v), (uint8_t) (p[1] * v), (uint8_t) (p[2] * v));
+            } else if (mode == 7) {  // Matrix: grüne Zeichen regnen von oben nach unten
+              auto hsh = [](uint32_t x) {
+                x ^= x >> 16;
+                x *= 0x7feb352dU;
+                x ^= x >> 15;
+                x *= 0x846ca68bU;
+                x ^= x >> 16;
+                return x;
+              };
+              const uint32_t step = (uint32_t) (tm * 9.0f);  // Flackern der Zeichen
+              for (int c = 0; c < COLS; c++) {
+                const uint32_t hc = hsh((uint32_t) c + 1);
+                const float spd = 3.0f + (hc % 100) / 100.0f * 5.0f;    // 3..8 Zeilen/s
+                const int trail = 5 + (int) ((hc >> 8) % 8);            // Schweiflänge 5..12
+                const float off = ((hc >> 16) % 1000) / 1000.0f * (ROWS + trail);
+                const float head = fmodf(tm * spd + off, (float) (ROWS + trail));
+                for (int r = 0; r < ROWS; r++) {
+                  const float d = head - r;
+                  Color px(0, 0, 0);
+                  if (d >= 0.0f && d < trail) {
+                    if (d < 1.0f) {  // Spitze: helles Grünweiß
+                      px = Color(150, 255, 150);
+                    } else {
+                      float v = 1.0f - d / trail;
+                      v *= v;
+                      const uint32_t hf = hsh((uint32_t) (r * 31 + c * 131) + step * 977u);
+                      v *= 0.65f + 0.35f * ((hf % 100) / 100.0f);
+                      px = Color(0, (uint8_t) (255.0f * v), 0);
+                    }
+                  }
+                  frame[r * COLS + c] = px;
+                }
+              }
+            } else {  // Uhr
+              bool on[N];
+              for (int i = 0; i < N; i++) on[i] = false;
+              // jeder Buchstabe leuchtet in zwei LED-Zeilen (2r und 2r+1)
+              auto mark = [&](const W &w) {
+                for (int i = 0; i < w.n; i++) {
+                  on[(2 * w.r) * COLS + w.c + i] = true;
+                  on[(2 * w.r + 1) * COLS + w.c + i] = true;
+                }
+              };
+              mark(ES);
+              mark(IST);
+              if (valid) {
+                int m5 = t.minute / 5;
+                int h = t.hour % 12;
+                if (m5 >= 5) h = (h + 1) % 12;  // ab "fünf vor halb" zählt die nächste Stunde
+                switch (m5) {
+                  case 0: mark(UHR); break;
+                  case 1: mark(M_FUENF); mark(NACH); break;
+                  case 2: mark(M_ZEHN); mark(NACH); break;
+                  case 3: mark(M_VIERTEL); mark(NACH); break;
+                  case 4: mark(M_ZWANZIG); mark(NACH); break;
+                  case 5: mark(M_FUENF); mark(VOR); mark(HALB); break;
+                  case 6: mark(HALB); break;
+                  case 7: mark(M_FUENF); mark(NACH); mark(HALB); break;
+                  case 8: mark(M_ZWANZIG); mark(VOR); break;
+                  case 9: mark(M_VIERTEL); mark(VOR); break;
+                  case 10: mark(M_ZEHN); mark(VOR); break;
+                  default: mark(M_FUENF); mark(VOR); break;
+                }
+                if (m5 == 0 && h == 1) mark(H_EIN); else mark(HOURS[h]);
+                // Restminuten: "+ <1..4> MINUTEN" nur bei 1-4 Minuten, sonst aus
+                const int mm = t.minute % 5;
+                if (mm > 0 && id(show_minutes).state) {
+                  mark(PLUS);
+                  mark(MINUTEN);
+                  const W dg = {7, (uint8_t) (${digit_col} + mm - 1), 1};
+                  mark(dg);
+                }
+              }
+              size_t ia = id(col_active).active_index().value_or(0);
+              if (ia > 8) ia = 0;
+              if (ia == 8) {  // Zufall: jede Stunde eine andere Farbe (nie dieselbe wie zuvor)
+                if (valid) {
+                  int key = t.day_of_year * 24 + t.hour;
+                  if (key != id(rnd_key)) {
+                    id(rnd_key) = key;
+                    id(rnd_idx) = (id(rnd_idx) + 1 + (int) (random_uint32() % 7)) % 8;
+                  }
+                }
+                ia = id(rnd_idx);
+              }
+              Color fg(PAL[ia][0], PAL[ia][1], PAL[ia][2]);
+              const Color off(0, 0, 0);  // inaktive Buchstaben bleiben immer aus
+              for (int i = 0; i < N; i++) frame[i] = on[i] ? fg : off;
+            }
+
+            // Strombegrenzung: Schätzung aus allen Farbwerten (Helligkeit linear, Gamma = 1)
+            float sum = 0.0f;
+            for (int i = 0; i < N; i++) sum += frame[i].r + frame[i].g + frame[i].b;
+            float dyn_ma = (sum / 255.0f) * ${ma_per_channel} * bf;
+            float budget_ma = limit_ma - ${idle_ma_per_led} * N;
+            float lim = 1.0f;
+            if (dyn_ma > budget_ma) lim = (budget_ma > 0.0f) ? budget_ma / dyn_ma : 0.0f;
+            const float k = bf * lim;
+
+            for (int r = 0; r < ROWS; r++)
+              for (int c = 0; c < COLS; c++) {
+                const Color &p = frame[r * COLS + c];
+                const int cc = mirror ? (COLS - 1 - c) : c;
+                int idx = (serp && (r & 1)) ? r * COLS + (COLS - 1 - cc) : r * COLS + cc;
+                it[idx] = Color((uint8_t) (p.r * k), (uint8_t) (p.g * k), (uint8_t) (p.b * k));
+              }
