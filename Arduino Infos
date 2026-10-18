@@ -1,0 +1,36 @@
+Arduino Infos
+
+in meinem Beispiel habe ich einen Wemos D! Mini ESP32 verwendet.
+Für ARduino müssen noch folgende Plugins vorhanden sein:
+
+
+
+Wenn beim Start kein Wifi vorhanden ist wird ein Hotspot aufgebaut, hierauf Verbinden und das eigene WIFI konfigurieren.
+
+Bibliotheken (stehen mit GitHub-Links im Kopf der Datei)
+
+Das ESP32-Boardpaket von Espressif, Version 3.x oder neuer. WLAN, Webserver, DNS, mDNS und Speicher sind darin schon enthalten.
+FastLED, Version 3.9 oder neuer.
+
+Was die Uhr kann
+
+Farben: 8 Standardfarben, “Zufall” (neue Farbe jede volle Stunde) und eine eigene Farbe über den Farbwähler. Inaktive Buchstaben bleiben immer aus.
+Helligkeit: Prozentwerte für Tag und Nacht, dazu eine einstellbare Strombegrenzung (Standard 500 mA).
+Tag/Nacht: Das berechnet die Uhr selbst aus Breiten- und Längengrad, ganz ohne Internet-Dienst. Dazu gibt es “Nacht-Beginn Versatz” und “Morgen-Tag Versatz” in Minuten sowie die Zeitzone. Voreingestellt ist Freiburg. Zum Testen lässt sich der Modus auch auf “Immer Tag” oder “Immer Nacht” stellen.
+Effekte: Effekt Rainbow, Effekt Aurora, Effekt Matrix und Blinken in Rot, Grün, Blau und Weiß. Die Dauer ist zentral einstellbar (Standard 20 s).
+Weiteres: Die Einzelminuten (+1 bis +4 MINUTEN) lassen sich abschalten. Spiegeln und Zickzack-Verdrahtung stellst du im Webinterface um, ohne neu zu flashen.
+Banner: Unten im Webinterface steht ein fester Banner mit Link auf dein GitHub-Projekt und dein MakerWorld-Profil.
+
+NTP und WLAN
+
+NTP: Standardmäßig holt die Uhr den Zeitserver per DHCP. Liefert dein Router keinen, greift automatisch pool.ntp.org. Alternativ trägst du im Webinterface einen eigenen Server ein.
+Hotspot: Ist kein WLAN gespeichert oder nicht erreichbar, öffnet die Uhr nach 20 s den offenen Hotspot “Worduhr”. Die Konfigurationsseite öffnet sich dann automatisch, sonst über 192.168.4.1. Das WLAN trägst du unten im Webinterface ein, danach erreichst du die Uhr auch unter worduhr.local.
+Anzeige ohne Uhrzeit: Solange keine Uhrzeit da ist, pulsiert “ES IST”, orange im Hotspot-Modus, blau beim Verbinden.
+Hotspot-Verhalten: Der Hotspot schaltet sich ab, sobald das WLAN steht und niemand mehr darauf verbunden ist. Fällt das WLAN länger als 2 Minuten aus, geht er wieder an.
+
+Was du prüfen solltest
+
+NTP per DHCP: Der Aufruf dafür (esp_netif_sntp_init) ist die Stelle, an der es je nach Core-Version Compile-Probleme geben könnte. Meldet die IDE dort einen Fehler, schick mir die Meldung.
+ESP32-C6: LED_PIN ist auf 32 gesetzt (Wemos Mini ESP32). Beim C6 musst du ihn anpassen, und FastLED muss aktuell genug sein.
+Buchstabenraster: Ich habe dein Raster nur teilweise im Kopf: erste Zeile ESXISTXXXXXXXXXX und letzte Zeile X+X1234XMINUTEN. Die letzte Zeile habe ich mit einem X auf 16 Zeichen aufgefüllt und die Zeilen dazwischen selbst belegt. Das Raster steht im Kopf der Datei, die Wörter stehen in einer kleinen Tabelle (W_xxx = {Zeile, Spalte, Länge}). Weicht deine Frontplatte ab, musst du nur diese Tabelle ändern.
+Zeitansage: Ich habe sie so umgesetzt: “zwanzig nach”, “fünf vor halb”, “viertel vor” und “ein Uhr”.
