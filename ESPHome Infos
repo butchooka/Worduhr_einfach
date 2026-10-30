@@ -8,7 +8,7 @@ ap_password
 api_key
 
 
-in der ESPHome sollten folgende Angaben für deinen Standrot geändert werden:
+in der ESPHome sollten folgende Angaben für deinen Standort geändert werden:
 latitude:
 longitude: 
 led_pin:
