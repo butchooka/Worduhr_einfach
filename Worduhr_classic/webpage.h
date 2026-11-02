@@ -4,7 +4,7 @@
 
 const char INDEX_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Worduhr</title>
+<title>WortuhrClassic</title>
 <style>
 :root{--bg:#12141a;--card:#1d212b;--fg:#e8eaf0;--mut:#9aa3b5;--acc:#4da3ff;--bd:#2c3240}
 *{box-sizing:border-box}
@@ -30,7 +30,7 @@ footer{position:fixed;left:0;right:0;bottom:0;background:#0b0d12;border-top:1px 
 footer a{color:var(--acc);text-decoration:none;font-weight:600}
 </style></head><body>
 <div id="toast"></div>
-<header><h1>Worduhr</h1><div id="st">lade …</div></header>
+<header><h1>WortuhrClassic</h1><div id="st">lade …</div></header>
 <main>
 
 <section><h2>Farbe &amp; Helligkeit</h2>
@@ -74,12 +74,12 @@ footer a{color:var(--acc);text-decoration:none;font-weight:600}
 </section>
 
 <section><h2>Effekte</h2>
-<label>Dauer (Sekunden, gilt nach „Speichern“)</label><input type="number" id="es" min="1" max="600">
+<label>Dauer (Sekunden)</label><input type="number" id="es" min="1" max="600">
 <div class="grid">
 <button class="sec" onclick="eff('rainbow')">Effekt Rainbow</button>
 <button class="sec" onclick="eff('aurora')">Effekt Aurora</button>
 <button class="sec" onclick="eff('matrix')">Effekt Matrix</button>
-<button class="sec" onclick="eff('stop')">Stopp</button>
+<button class="sec" onclick="eff('confetti')">Effekt Confetti</button>
 <button class="sec" onclick="eff('red')">Blinken Rot</button>
 <button class="sec" onclick="eff('green')">Blinken Grün</button>
 <button class="sec" onclick="eff('blue')">Blinken Blau</button>
@@ -99,27 +99,28 @@ footer a{color:var(--acc);text-decoration:none;font-weight:600}
 <small>Steht die Schrift Kopf oder spiegelverkehrt, hier umstellen.</small>
 </section>
 
-<button onclick="save()">Einstellungen speichern</button>
-
 <section style="margin-top:18px"><h2>WLAN</h2>
 <button class="sec" onclick="scan()">Netzwerke suchen</button>
+<label>Verfügbare Netzwerke</label>
+<select id="ws_sel" style="margin-bottom:8px; display:none;" onchange="$('ws').value=this.value; triggerAutoSave();"></select>
 <label>Netzwerk (SSID)</label><input type="text" id="ws" list="wl" autocapitalize="none" autocomplete="off"><datalist id="wl"></datalist>
 <label>Passwort</label><input type="password" id="wp" autocomplete="off">
 <div class="grid">
 <button onclick="wifi()">Verbinden</button>
 <button class="sec" onclick="wifiReset()">WLAN vergessen</button>
 </div>
-<small>Ohne bekanntes WLAN öffnet die Uhr den Hotspot „Worduhr“ (ohne Passwort).</small>
+<small>Ohne bekanntes WLAN öffnet die Uhr den Hotspot „WortuhrClassic“ (ohne Passwort).</small>
 </section>
 </main>
 
 <footer>
-Worduhr einfach · Quellcode &amp; Doku auf <a href="https://github.com/butchooka/Worduhr_einfach" target="_blank" rel="noopener">GitHub</a>
+WortuhrClassic einfach · Quellcode &amp; Doku auf <a href="https://github.com/butchooka/WortuhrClassic_einfach" target="_blank" rel="noopener">GitHub</a>
 · Mehr Modelle auf meinem <a href="https://makerworld.com/de/@butchooka" target="_blank" rel="noopener">MakerWorld-Profil</a>
 </footer>
 
 <script>
 const $=i=>document.getElementById(i);
+let saveTimer;
 function toast(t,e){const x=$('toast');x.textContent=t;x.style.background=e?'#c62828':'#2e7d32';x.style.display='block';setTimeout(()=>x.style.display='none',2500)}
 function ui(){
  $('ccw').style.display=$('cm').value==9?'block':'none';
@@ -131,16 +132,21 @@ function tzSync(){
  if(!f)s.value='';
 }
 function fill(c){
- ['bd','bn','ma','cm','lat','lon','no','mo','dn','nm','ns','tz','es'].forEach(k=>$(k).value=c[k]);
- $('cc').value='#'+('000000'+c.cc.toString(16)).slice(-6);
+ ['bd','bn','ma','cm','lat','lon','no','mo','dn','nm','ns','tz','es'].forEach(k=>$(k).value=c[k]);$('cc').value='#'+('000000'+c.cc.toString(16)).slice(-6);
  ['md','mx','my','sp'].forEach(k=>$(k).checked=!!c[k]);
  ui();tzSync();
 }
 function status(s){
  let t=s.tv?(s.t+' Uhr · '+(s.night?'🌙 Nacht':'☀️ Tag')+' · Aufgang '+s.sr+' · Untergang '+s.ss):'Noch keine Uhrzeit (NTP wartet)';
- let w=s.wc?('WLAN: '+s.ssid+' · '+s.ip+' · worduhr.local'):(s.ap?'Hotspot „Worduhr“ aktiv, kein WLAN verbunden':'WLAN: Verbindung wird aufgebaut …');
+ let w=s.wc?('WLAN: '+s.ssid+' · '+s.ip+' · WortuhrClassic.local'):(s.ap?'Hotspot „WortuhrClassic“ aktiv, kein WLAN verbunden':'WLAN: Verbindung wird aufgebaut …');
  if(s.wc&&s.ap)w+=' · Hotspot noch aktiv';
  $('st').innerHTML=t+'<br>'+w;
+ 
+ // Automatische Netzwerksuche beim ersten Laden im Hotspot-Modus
+ if(s.ap && window._autoScanned !== true) {
+   window._autoScanned = true;
+   scan();
+ }
 }
 async function load(first){
  try{const r=await fetch('/api/state');const j=await r.json();if(first)fill(j.c);status(j.s)}catch(e){}
@@ -148,17 +154,27 @@ async function load(first){
 async function save(){
  const p=new URLSearchParams();
  ['bd','bn','ma','cm','lat','lon','no','mo','dn','nm','ns','tz','es'].forEach(k=>p.set(k,$(k).value));
- p.set('cc',parseInt($('cc').value.slice(1),16));
- ['md','mx','my','sp'].forEach(k=>p.set(k,$(k).checked?1:0));
+ p.set('cc',parseInt($('cc').value.slice(1),16)); ['md','mx','my','sp'].forEach(k=>p.set(k,$(k).checked?1:0));
  try{const r=await fetch('/api/save',{method:'POST',body:p});toast(r.ok?'Gespeichert':'Fehler beim Speichern',!r.ok)}catch(e){toast('Keine Verbindung',1)}
- load(false);
+}
+function triggerAutoSave(){
+ clearTimeout(saveTimer);
+ saveTimer = setTimeout(save, 500);
 }
 function eff(n){fetch('/api/effect',{method:'POST',body:new URLSearchParams({n})}).catch(()=>{})}
 async function scan(){
- toast('Suche läuft …');
- try{const r=await fetch('/api/scan');const l=await r.json();
- $('wl').innerHTML=l.map(s=>'<option value="'+s.replace(/"/g,'&quot;')+'">').join('');
- toast(l.length+' Netzwerke gefunden');}catch(e){toast('Suche fehlgeschlagen',1)}
+ toast('Suche Netze …');
+ try{
+   const r=await fetch('/api/scan');
+   const l=await r.json();
+   $('wl').innerHTML=l.map(s=>'<option value="'+s.replace(/"/g,'&quot;')+'">').join('');
+   const sel = $('ws_sel');
+   if(l.length > 0) {
+     sel.innerHTML = '<option value="">-- Bitte WLAN wählen --</option>' + l.map(s=>'<option value="'+s+'">'+s+'</option>').join('');
+     sel.style.display = 'block';
+   }
+   toast(l.length+' Netzwerke gefunden');
+ }catch(e){toast('Suche fehlgeschlagen',1)}
 }
 async function wifi(){
  if(!$('ws').value){toast('SSID fehlt',1);return}
@@ -169,8 +185,19 @@ async function wifiReset(){
  if(!confirm('Gespeichertes WLAN vergessen? Die Uhr öffnet dann den Hotspot.'))return;
  await fetch('/api/wifireset',{method:'POST'});toast('WLAN gelöscht');
 }
-$('cm').onchange=ui;$('nm').onchange=ui;
-$('tzs').onchange=()=>{if($('tzs').value)$('tz').value=$('tzs').value};
-$('tz').oninput=tzSync;
+
+// Event-Listener für automatisches Speichern bei Eingabe/Änderung
+['bd','bn','ma','lat','lon','no','mo','ns','tz','es','ws','wp'].forEach(k=> {
+  $(k).oninput = triggerAutoSave;
+  $(k).onchange = save;
+});
+['cm','dn','nm','md','mx','my','sp'].forEach(k=> {
+  $(k).onchange = () => { ui(); save(); };
+});
+$('cc').oninput = triggerAutoSave;
+$('cc').onchange = save;
+
+$('tzs').onchange=()=>{if($('tzs').value){$('tz').value=$('tzs').value; save();}};$('tz').oninput=tzSync;
+
 load(true);setInterval(()=>load(false),4000);
 </script></body></html>)rawliteral";

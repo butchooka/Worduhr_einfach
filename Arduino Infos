@@ -1,5 +1,8 @@
 Arduino Infos
 
+Worduhr_classic Verzeichnis inkl der *.ino und *.h kopieren und in der IDE starten, für das eigene Board kompilieren.
+Alternativ eine fertige *.bin aus dem "compiled_Ardunio" nehmen
+
 in meinem Beispiel habe ich einen Wemos D! Mini ESP32 verwendet.
 
 Wenn beim Start kein Wifi vorhanden ist wird ein Hotspot aufgebaut, hierauf Verbinden und das eigene WIFI konfigurieren.

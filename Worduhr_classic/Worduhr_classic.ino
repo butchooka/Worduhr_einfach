@@ -1,49 +1,9 @@
 /*
   ============================================================================
-  Worduhr einfach  -  Wortuhr mit 16x16 WS2812-Matrix, ESP32, ohne Home Assistant
+  WortuhrClassic einfach  -  Wortuhr mit 16x16 WS2812-Matrix, ESP32, ohne Home Assistant
   ============================================================================
-  Projekt:   https://github.com/butchooka/Worduhr_einfach
+  Projekt:   https://github.com/butchooka/WortuhrClassic_einfach
   MakerWorld: https://makerworld.com/de/@butchooka
-
-  BENÖTIGTE BOARDS / BIBLIOTHEKEN
-  ----------------------------------------------------------------------------
-  1) ESP32-Boardpaket von Espressif, Version 3.x oder neuer
-     https://github.com/espressif/arduino-esp32
-     Boardverwalter-URL:
-     https://espressif.github.io/arduino-esp32/package_esp32_index.json
-     (enthält bereits: WiFi, WebServer, DNSServer, ESPmDNS, Preferences)
-
-  2) FastLED, Version 3.9 oder neuer  (Bibliotheksverwalter: "FastLED")
-     https://github.com/FastLED/FastLED
-
-  Mehr wird nicht gebraucht.
-
-  BOARD-EINSTELLUNG
-  ----------------------------------------------------------------------------
-  Wemos Mini ESP32:  "WEMOS LOLIN32" oder "ESP32 Dev Module"
-  ESP32-C6:          "ESP32C6 Dev Module" (LED_PIN unten anpassen)
-
-  ERSTER START
-  ----------------------------------------------------------------------------
-  Ist kein WLAN gespeichert (oder nicht erreichbar), öffnet die Uhr nach 20 s den
-  offenen Hotspot "Worduhr". Verbinden, die Konfigurationsseite öffnet sich
-  automatisch (sonst http://192.168.4.1), unten unter "WLAN" das Heim-WLAN eintragen.
-  Danach erreichbar unter http://worduhr.local oder der IP aus dem Router.
-
-  BUCHSTABENRASTER (8 Buchstabenzeilen x 16 Spalten, je Zeile 2 LED-Zeilen)
-  ----------------------------------------------------------------------------
-    Zeile 0   E S X I S T X X X X X X X X X X
-    Zeile 1   Z W A N Z I G H A L B X Z E H N
-    Zeile 2   F Ü N F V I E R T E L X N A C H
-    Zeile 3   V O R X H A L B X Z E H N E L F
-    Zeile 4   Z W E I D R E I N E U N V I E R
-    Zeile 5   A C H T E I N S E C H S F Ü N F
-    Zeile 6   S I E B E N Z W Ö L F X X U H R
-    Zeile 7   X + X 1 2 3 4 X M I N U T E N X
-  (Zeile 5: EINS und SECHS teilen sich das S. Zeile 7 hat nur 15 Zeichen,
-   ein X am Ende wurde ergänzt.)
-  Weicht dein Raster ab, nur die Wort-Tabelle (Word W_xxx = {Zeile, Spalte, Länge})
-  weiter unten anpassen.
   ============================================================================
 */
 
@@ -66,13 +26,12 @@
 #define MATRIX_W     16
 #define MATRIX_H     16
 #define NUM_LEDS     (MATRIX_W * MATRIX_H)
-#define AP_NAME      "Worduhr"   // Hotspot-Name (offen, ohne Passwort)
-#define HOSTNAME     "worduhr"
+#define AP_NAME      "WortuhrClassic"   // Hotspot-Name (offen, ohne Passwort)
+#define HOSTNAME     "WortuhrClassic"
 #define CFG_MAGIC    3
 
-// Typen stehen bewusst ganz oben (wegen der automatischen Prototypen der Arduino IDE)
 struct Word { uint8_t row, col, len; };
-enum Effect { EFF_NONE, EFF_RAINBOW, EFF_AURORA, EFF_MATRIX, EFF_BLINK_RED, EFF_BLINK_GREEN, EFF_BLINK_BLUE, EFF_BLINK_WHITE };
+enum Effect { EFF_NONE, EFF_RAINBOW, EFF_AURORA, EFF_MATRIX, EFF_CONFETTI, EFF_BLINK_RED, EFF_BLINK_GREEN, EFF_BLINK_BLUE, EFF_BLINK_WHITE };
 
 CRGB leds[NUM_LEDS];
 WebServer server(80);
@@ -108,9 +67,9 @@ void setDefaults() {
   memset(&cfg, 0, sizeof(cfg));
   cfg.magic = CFG_MAGIC;
   cfg.brightDay = 80;
-  cfg.brightNight = 15;
+  cfg.brightNight = 5;
   cfg.maxMilliamps = 500;
-  cfg.colorMode = 0;
+  cfg.colorMode = 8;
   cfg.customColor = 0xFFFFFF;
   cfg.lat = 47.999f;
   cfg.lon = 7.842f;
@@ -122,7 +81,7 @@ void setDefaults() {
   strcpy(cfg.tz, "CET-1CEST,M3.5.0,M10.5.0/3");
   cfg.effectSeconds = 20;
   cfg.minuteDots = 1;
-  cfg.mirrorX = 0;
+  cfg.mirrorX = 1;
   cfg.mirrorY = 0;
   cfg.serpentine = 1;
 }
@@ -141,7 +100,7 @@ void loadConfig() {
 void saveConfig() { prefs.putBytes("cfg", &cfg, sizeof(Config)); }
 
 // ----------------------------------------------------------------------------
-// Matrix-Zuordnung: logisch (x = Spalte, y = LED-Zeile, 0 = oben) -> LED-Index
+// Matrix-Zuordnung
 // ----------------------------------------------------------------------------
 int XY(int x, int y) {
   if (cfg.mirrorX) x = MATRIX_W - 1 - x;
@@ -174,20 +133,19 @@ CRGB currentColor() {
 }
 
 // ----------------------------------------------------------------------------
-// Wort-Tabelle  {Buchstabenzeile, Startspalte, Länge}
+// Wort-Tabelle
 // ----------------------------------------------------------------------------
-
 const Word W_ES        = {0, 0, 2};
 const Word W_IST       = {0, 3, 3};
 const Word W_ZWANZIG   = {1, 0, 7};
-const Word W_HALB_OBEN = {1, 7, 4};    // HALB in Zeile 1
-const Word W_ZEHN_M    = {1, 12, 4};   // ZEHN (Minuten)
-const Word W_FUENF_M   = {2, 0, 4};    // FÜNF (Minuten)
+const Word W_HALB_OBEN = {1, 7, 4};
+const Word W_ZEHN_M    = {1, 12, 4};
+const Word W_FUENF_M   = {2, 0, 4};
 const Word W_VIERTEL   = {2, 4, 7};
 const Word W_NACH      = {2, 12, 4};
 const Word W_VOR       = {3, 0, 3};
-const Word W_HALB_UNT  = {3, 4, 4};    // HALB in Zeile 3
-const Word W_ZEHN_H    = {3, 9, 4};    // ZEHN (Stunde)
+const Word W_HALB_UNT  = {3, 4, 4};
+const Word W_ZEHN_H    = {3, 9, 4};
 const Word W_ELF       = {3, 13, 3};
 const Word W_ZWEI      = {4, 0, 4};
 const Word W_DREI      = {4, 4, 4};
@@ -195,25 +153,21 @@ const Word W_NEUN      = {4, 8, 4};
 const Word W_VIER      = {4, 12, 4};
 const Word W_ACHT      = {5, 0, 4};
 const Word W_EINS      = {5, 4, 4};
-const Word W_SECHS     = {5, 7, 5};    // teilt sich das S mit EINS
-const Word W_FUENF_H   = {5, 12, 4};   // FÜNF (Stunde)
+const Word W_SECHS     = {5, 7, 5};
+const Word W_FUENF_H   = {5, 12, 4};
 const Word W_SIEBEN    = {6, 0, 6};
 const Word W_ZWOELF    = {6, 6, 5};
 const Word W_UHR       = {6, 13, 3};
 
-// Welches HALB leuchten soll: W_HALB_UNT (Zeile 3, steht nach VOR/NACH) oder W_HALB_OBEN (Zeile 1)
 const Word& W_HALB = W_HALB_UNT;
-// Minutenzeile (Zeile 7): "+" in Spalte 1, Ziffern 1..4 in Spalte 3..6, MINUTEN ab Spalte 8
 const uint8_t MIN_ROW = 7, PLUS_COL = 1, DIGIT_COL0 = 3;
 const Word W_MINUTEN = {7, 8, 7};
 
-// Stunde 0..11 -> Wort (0 = zwölf)
 const Word* HOUR_WORDS[12] = {
   &W_ZWOELF, &W_EINS, &W_ZWEI, &W_DREI, &W_VIER, &W_FUENF_H,
   &W_SECHS, &W_SIEBEN, &W_ACHT, &W_NEUN, &W_ZEHN_H, &W_ELF
 };
 
-// Ein Buchstabe = 2 LED-Zeilen
 void setLetter(uint8_t row, uint8_t col, CRGB c) {
   leds[XY(col, row * 2)] = c;
   leds[XY(col, row * 2 + 1)] = c;
@@ -225,11 +179,67 @@ void drawWord(const Word& w, CRGB c, uint8_t len = 0) {
 }
 
 // ----------------------------------------------------------------------------
+// IP-Anzeige Font & Funktion
+// ----------------------------------------------------------------------------
+const uint8_t DIGIT_FONT[11][5] = {
+  {0x3E, 0x51, 0x49, 0x45, 0x3E}, // 0
+  {0x00, 0x42, 0x7F, 0x40, 0x00}, // 1
+  {0x42, 0x61, 0x51, 0x49, 0x46}, // 2
+  {0x21, 0x41, 0x45, 0x4B, 0x31}, // 3
+  {0x18, 0x14, 0x12, 0x7F, 0x10}, // 4
+  {0x27, 0x45, 0x45, 0x45, 0x39}, // 5
+  {0x3C, 0x4A, 0x49, 0x49, 0x30}, // 6
+  {0x01, 0x71, 0x09, 0x05, 0x03}, // 7
+  {0x36, 0x49, 0x49, 0x49, 0x36}, // 8
+  {0x06, 0x49, 0x49, 0x29, 0x1E}, // 9
+  {0x00, 0x60, 0x60, 0x00, 0x00}  // .
+};
+
+void drawLargeChar(char c, CRGB col) {
+  int idx = -1;
+  if (c >= '0' && c <= '9') idx = c - '0';
+  else if (c == '.') idx = 10;
+  else return;
+
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  int xOff = (c == '.') ? 6 : 3;
+  int yOff = 1;
+
+  for (int x = 0; x < 5; x++) {
+    uint8_t colBits = DIGIT_FONT[idx][x];
+    for (int y = 0; y < 7; y++) {
+      if (colBits & (1 << y)) {
+        for (int dx = 0; dx < 2; dx++) {
+          for (int dy = 0; dy < 2; dy++) {
+            int px = xOff + x * 2 + dx;
+            int py = yOff + y * 2 + dy;
+            if (px >= 0 && px < MATRIX_W && py >= 0 && py < MATRIX_H) {
+              leds[XY(px, py)] = col;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+void showIPSequence(String ipStr) {
+  for (int i = 0; i < ipStr.length(); i++) {
+    drawLargeChar(ipStr[i], CRGB::Cyan);
+    FastLED.show();
+    delay(1000);  // 1 Sekunde anzeigen
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+    FastLED.show();
+    delay(500);   // 0,5 Sekunden Pause
+  }
+}
+
+// ----------------------------------------------------------------------------
 // Zeit / Tag-Nacht
 // ----------------------------------------------------------------------------
 bool timeValid() { return time(nullptr) > 1700000000; }
 
-int sunriseMin = 0, sunsetMin = 0, sunPolar = 0;  // sunPolar: 0 normal, 1 Polartag, 2 Polarnacht
+int sunriseMin = 0, sunsetMin = 0, sunPolar = 0;
 int sunYday = -1;
 bool sunDirty = true;
 bool nightNow = false;
@@ -253,7 +263,6 @@ int utcOffsetMinutes(time_t now) {
   return d;
 }
 
-// Sonnenauf-/untergang (NOAA-Näherung), Ergebnis in Minuten Ortszeit
 void calcSun(const struct tm& lt, int offMin) {
   const double N = lt.tm_yday + 1;
   const double g = 2.0 * PI / 365.0 * (N - 1.0);
@@ -292,7 +301,7 @@ bool computeNight(const struct tm& lt, time_t now) {
 }
 
 // ----------------------------------------------------------------------------
-// NTP (DHCP oder fester Server)
+// NTP
 // ----------------------------------------------------------------------------
 static char ntpActive[48];
 bool sntpRunning = false;
@@ -307,8 +316,6 @@ void startNtp() {
     esp_sntp_config_t sc = ESP_NETIF_SNTP_DEFAULT_CONFIG(ntpActive);
     if (esp_netif_sntp_init(&sc) == ESP_OK) sntpRunning = true;
   } else {
-    // Server aus DHCP (Option 42), falls der Router welche liefert.
-    // Sonst greifen die beiden Fallback-Server.
     esp_sntp_config_t sc = ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(2,
                              ESP_SNTP_SERVER_LIST("pool.ntp.org", "time.cloudflare.com"));
     sc.server_from_dhcp = true;
@@ -329,8 +336,8 @@ void renderClock(const struct tm& t) {
   drawWord(W_IST, c);
 
   const int m = t.tm_min;
-  const int sector = m / 5;       // 0..11
-  const int rem = m % 5;          // 0..4 Einzelminuten
+  const int sector = m / 5;
+  const int rem = m % 5;
   int h = t.tm_hour % 12;
   if (sector >= 5) h = (h + 1) % 12;
 
@@ -349,11 +356,9 @@ void renderClock(const struct tm& t) {
     case 11: drawWord(W_FUENF_M, c); drawWord(W_VOR, c); break;
   }
 
-  // "ein Uhr" statt "eins Uhr"
   if (sector == 0 && h == 1) drawWord(W_EINS, c, 3);
   else drawWord(*HOUR_WORDS[h], c);
 
-  // +1..+4 MINUTEN
   if (cfg.minuteDots && rem > 0) {
     setLetter(MIN_ROW, PLUS_COL, c);
     setLetter(MIN_ROW, DIGIT_COL0 + rem - 1, c);
@@ -361,7 +366,6 @@ void renderClock(const struct tm& t) {
   }
 }
 
-// Solange keine Uhrzeit vorliegt: "ES IST" pulsiert (orange = Hotspot, blau = verbinde/NTP)
 bool apActive = false;
 
 void renderNoTime() {
@@ -433,6 +437,14 @@ void renderEffect(uint32_t now, float dt) {
       }
       break;
 
+    case EFF_CONFETTI:
+      fadeToBlackBy(leds, NUM_LEDS, 20);
+      for (int i = 0; i < 3; i++) {
+        int pos = random16(NUM_LEDS);
+        leds[pos] += CHSV(random8(), 255, 255);
+      }
+      break;
+
     case EFF_BLINK_RED:
     case EFF_BLINK_GREEN:
     case EFF_BLINK_BLUE:
@@ -440,7 +452,7 @@ void renderEffect(uint32_t now, float dt) {
       CRGB c = (effect == EFF_BLINK_RED) ? CRGB(255, 0, 0)
              : (effect == EFF_BLINK_GREEN) ? CRGB(0, 255, 0)
              : (effect == EFF_BLINK_BLUE) ? CRGB(0, 0, 255) : CRGB(255, 255, 255);
-      c.nscale8(beatsin8(15, 0, 255, effectStart));   // ca. 4 s pro Zyklus
+      c.nscale8(beatsin8(30, 0, 255, effectStart));   // Frequenz verdoppelt -> halbe Zeit für Ein-/Abblenden
       fill_solid(leds, NUM_LEDS, c);
       break;
     }
@@ -458,8 +470,8 @@ void startAP() {
   if (apActive) return;
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-  WiFi.softAP(AP_NAME);                 // kein Passwort -> offener Hotspot
-  dns.start(53, "*", apIP);             // Captive Portal
+  WiFi.softAP(AP_NAME);
+  dns.start(53, "*", apIP);
   apActive = true;
   apStarted = millis();
 }
@@ -480,10 +492,8 @@ void netTick() {
       if (MDNS.begin(HOSTNAME)) MDNS.addService("http", "tcp", 80);
       mdnsStarted = true;
     }
-    // Hotspot abschalten, sobald WLAN steht und niemand mehr darauf verbunden ist
     if (apActive && WiFi.softAPgetStationNum() == 0 && now - apStarted > 10000) stopAP();
   } else {
-    // WLAN weg (z. B. Router-Ausfall) -> nach 2 Minuten wieder Hotspot anbieten
     if (!apActive && now - lastConnectedMs > 120000) startAP();
     if (savedSsid.length() && now - lastReconnectMs > 60000) {
       lastReconnectMs = now;
@@ -493,10 +503,8 @@ void netTick() {
 }
 
 // ----------------------------------------------------------------------------
-// Webinterface
+// Webinterface API
 // ----------------------------------------------------------------------------
-// Die HTML-Seite liegt in webpage.h (INDEX_HTML)
-
 String jq(const String& in) {
   String o = "\"";
   for (unsigned i = 0; i < in.length(); i++) {
@@ -625,6 +633,7 @@ void handleEffect() {
   if (n == "rainbow") e = EFF_RAINBOW;
   else if (n == "aurora") e = EFF_AURORA;
   else if (n == "matrix") e = EFF_MATRIX;
+  else if (n == "confetti") e = EFF_CONFETTI;
   else if (n == "red") e = EFF_BLINK_RED;
   else if (n == "green") e = EFF_BLINK_GREEN;
   else if (n == "blue") e = EFF_BLINK_BLUE;
@@ -680,7 +689,6 @@ void setupServer() {
   server.on("/api/scan", HTTP_GET, handleScan);
   server.on("/api/wifi", HTTP_POST, handleWifi);
   server.on("/api/wifireset", HTTP_POST, handleWifiReset);
-  // Captive Portal: alles Unbekannte (Handy-Verbindungstests) auf die Startseite umleiten
   server.onNotFound([]() {
     if (apActive) {
       server.sendHeader("Location", "http://192.168.4.1/", true);
@@ -704,7 +712,7 @@ void setup() {
   random16_add_entropy(esp_random());
   randomColor = CRGB(CHSV(random8(), 255, 255));
 
-  prefs.begin("worduhr", false);
+  prefs.begin("WortuhrClassic", false);
   loadConfig();
   savedSsid = prefs.getString("ssid", "");
   savedPass = prefs.getString("pass", "");
@@ -718,7 +726,7 @@ void setup() {
   WiFi.setHostname(HOSTNAME);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
-  startNtp();   // vor dem Verbinden, damit DHCP-NTP-Server übernommen werden können
+  startNtp();
 
   if (savedSsid.length()) {
     WiFi.begin(savedSsid.c_str(), savedPass.c_str());
@@ -729,9 +737,15 @@ void setup() {
       delay(30);
     }
   }
-  if (WiFi.status() != WL_CONNECTED) startAP();
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    // IP-Adresse Ziffer für Ziffer im 16x16 Raster einblenden
+    showIPSequence(WiFi.localIP().toString());
+  } else {
+    startAP();
+  }
+  
   lastConnectedMs = millis();
-
   setupServer();
 }
 
@@ -745,7 +759,6 @@ void loop() {
 
   const uint32_t now = millis();
 
-  // Sekundentakt: Tag/Nacht bestimmen, Zufallsfarbe zur vollen Stunde wechseln
   if (now - lastSec >= 1000) {
     lastSec = now;
     if (timeValid()) {
@@ -762,7 +775,8 @@ void loop() {
     }
   }
 
-  const uint32_t interval = (effect != EFF_NONE) ? 25 : 200;
+  // Framerate für flüssigere Effekte erhöht (15ms statt 200ms)
+  const uint32_t interval = (effect != EFF_NONE) ? 15 : 200;
   if (now - lastFrame < interval) { delay(1); return; }
   const float dt = (now - lastFrame) / 1000.0f;
   lastFrame = now;
