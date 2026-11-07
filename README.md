@@ -8,7 +8,7 @@ Stand 10/2026 DE Version
  https://github.com/butchooka/Wordclock_Multi
 
 Stand 07.11.2026: Basis steht, im Testing und letzter Feinschliff läuft.
-Veröffentlichung der 3D Modelle und zeitnah auch des Customizer in Makerworld steht in den nächsten Tagen bevor
+Veröffentlichung der 3D Modelle und zeitnah des Customizer in Makerworld steht in den nächsten Tagen bevor
  
 - Scad/Freecad Makro für Gehäuse (mehrsprachig) + mehrere Halterungen, flexibel für beliebige ESP32 Boards, Schriftart kann selbst gewählt werden etc
 - Gehäusevarianten gedruckt + in gekauften Bilderrahmen eingefügt
